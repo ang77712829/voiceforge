@@ -10,8 +10,10 @@ const FunSpeechBackend = {
   defaultVoices: ['中文男', '中文女', '日语男', '粤语女', '英文女', '英文男', '韩语女'],
 
   async getVoices(baseUrl) {
+    // 规范化 baseUrl
+    let root = baseUrl.replace(/\/$/, '').replace(/\/(ws|openai|stream)\/.*$/, '');
     try {
-      const resp = await fetch(`${baseUrl}/stream/v1/tts/voices`, { signal: AbortSignal.timeout(5000) });
+      const resp = await fetch(`${root}/openai/v1/audio/voices`, { signal: AbortSignal.timeout(5000) });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
       return data.voices || this.defaultVoices;
@@ -22,8 +24,13 @@ const FunSpeechBackend = {
   },
 
   async checkHealth(baseUrl) {
+    // 规范化 baseUrl：去掉末尾斜杠和多余的 WS/HTTP 路径
+    let root = baseUrl.replace(/\/$/, '');
+    // 如果用户误填了 /ws/v1/tts 或 /openai/v1/audio/speech 等路径，提取根地址
+    root = root.replace(/\/(ws|openai|stream)\/.*$/, '');
     try {
-      const resp = await fetch(`${baseUrl}/stream/v1/tts/health`, { signal: AbortSignal.timeout(3000) });
+      // FunSpeech OpenAI 兼容接口健康检查
+      const resp = await fetch(`${root}/openai/v1/models`, { signal: AbortSignal.timeout(3000) });
       return resp.ok;
     } catch {
       return false;
@@ -34,6 +41,8 @@ const FunSpeechBackend = {
    * HTTP(S) 合成（阻塞式，返回完整音频）
    */
   async synthesize(baseUrl, { text, voice, speed, format }) {
+    // 规范化 baseUrl
+    let root = baseUrl.replace(/\/$/, '').replace(/\/(ws|openai|stream)\/.*$/, '');
     const fmt = format === 'wav' ? 'wav' : 'mp3';
     const body = {
       model: 'cosyvoice',
@@ -43,7 +52,7 @@ const FunSpeechBackend = {
       speed: speed || 1.0,
     };
 
-    const resp = await fetch(`${baseUrl}/openai/v1/audio/speech`, {
+    const resp = await fetch(`${root}/openai/v1/audio/speech`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -80,8 +89,9 @@ const FunSpeechBackend = {
     }
 
     try {
-      // 将 HTTP URL 转为 WebSocket URL
-      const httpUrl = new URL(baseUrl);
+      // 规范化 baseUrl 并构造 WebSocket URL
+      let root = baseUrl.replace(/\/$/, '').replace(/\/(ws|openai|stream)\/.*$/, '');
+      const httpUrl = new URL(root);
       const wsProtocol = httpUrl.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${wsProtocol}//${httpUrl.host}/ws/v1/tts`;
 
