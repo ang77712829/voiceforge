@@ -172,10 +172,12 @@ const FunSpeechBackend = {
                 }
                 break;
 
-              case 'SynthesisCompleted':
+              case 'SentenceEnd':
+                // FunSpeech 在 SentenceEnd 后不会发 SynthesisCompleted，
+                // 音频已在之前的 Binary 帧中全部收到，此时直接结束连接
                 complete = true;
                 clearTimeout(timeoutId);
-                ws.close();
+                if (ws.readyState === WebSocket.OPEN) ws.close();
                 const totalLength = audioChunks.reduce((s, c) => s + c.byteLength, 0);
                 const merged = new Uint8Array(totalLength);
                 let offset = 0;
@@ -191,7 +193,10 @@ const FunSpeechBackend = {
                 break;
 
               case 'MetaInfo':
-                // 元信息，忽略
+              case 'SentenceBegin':
+              case 'SentenceSynthesis':
+              case 'SynthesisStarted':
+                // 正常状态消息，无需处理
                 break;
 
               default:
@@ -226,7 +231,23 @@ const FunSpeechBackend = {
       };
 
       ws.onclose = () => {
-        if (!complete) cleanup();
+        if (!complete) {
+          // 有音频就直接 resolve，没有才报错
+          if (audioChunks.length > 0) {
+            complete = true;
+            clearTimeout(timeoutId);
+            const totalLength = audioChunks.reduce((s, c) => s + c.byteLength, 0);
+            const merged = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const chunk of audioChunks) {
+              merged.set(new Uint8Array(chunk), offset);
+              offset += chunk.byteLength;
+            }
+            resolve(merged.buffer);
+          } else {
+            cleanup(new Error('FunSpeech WebSocket 连接已关闭，未收到音频'));
+          }
+        }
       };
     } catch (e) {
       reject(e);
