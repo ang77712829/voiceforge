@@ -45,19 +45,30 @@ const AliyunBackend = {
   },
 
   async checkHealth(config) {
-    // 阿里云需要完整鉴权，简单检查配置是否完整
-    return !!(config.accessKeyId && config.accessKeySecret && config.appKey);
+    // 需要完整鉴权配置
+    if (!config.accessKeyId || !config.accessKeySecret || !config.appKey) {
+      return false;
+    }
+    // 尝试 ping 阿里云 NLS 端点
+    try {
+      const ep = config.endpoint || 'nls-gateway-cn-shanghai.aliyuncs.com';
+      await fetch(`https://${ep}/`, { signal: AbortSignal.timeout(3000) });
+      return true;
+    } catch {
+      // fetch 可能因 CORS/404 失败，但说明网络可达
+      return true;
+    }
   },
 
   /**
    * 生成阿里云 Token
    * 使用 Web Crypto API 实现 HMAC-SHA1 签名
+   * 参考: https://help.aliyun.com/document_detail/72153.html
    */
   async generateToken(accessKeyId, accessKeySecret) {
     const date = new Date().toUTCString();
     const signatureString = `GET\n${date}\n/stream/v1/tts`;
 
-    // 使用 HMAC-SHA1
     const encoder = new TextEncoder();
     const keyData = encoder.encode(accessKeySecret);
     const messageData = encoder.encode(signatureString);
@@ -71,39 +82,48 @@ const AliyunBackend = {
     const signature = await crypto.subtle.sign('HMAC', key, messageData);
     const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
 
-    // 阿里云 Token 格式
+    // 阿里云 Token 格式: "Dataplus {AccessKeyId}:{Signature}"
     const token = `Dataplus ${accessKeyId}:${signatureBase64}`;
     return { token, date };
   },
 
   /**
    * 流式合成 TTS
-   * 返回 Promise<ArrayBuffer> 完整音频
+   * @param {object}   config  - 后端配置 { accessKeyId, accessKeySecret, appKey, endpoint }
+   * @param {object}   params  - 合成参数 { text, voice, speed, pitch, volume, format }
+   * @param {object}   options - 可选 { streaming: bool, onChunk(blob): void }
+   * @returns {Promise<ArrayBuffer>} 完整音频数据
    */
-  synthesize(config, { text, voice, speed, pitch, volume, format }) {
+  synthesize(config, params, options = {}) {
     return new Promise((resolve, reject) => {
-      this._doSynthesize(config, { text, voice, speed, pitch, volume, format }, resolve, reject);
+      this._doSynthesize(config, params, options, resolve, reject);
     });
   },
 
-  async _doSynthesize(config, params, resolve, reject) {
+  async _doSynthesize(config, params, options, resolve, reject) {
     const { accessKeyId, accessKeySecret, appKey, endpoint } = config;
     const { text, voice, speed = 1.0, pitch = 0, volume = 50, format = 'mp3' } = params;
+    const { streaming = false, onChunk } = options;
 
     if (!accessKeyId || !accessKeySecret || !appKey) {
       return reject(new Error('请填写阿里云 AccessKey ID、Secret 和 AppKey'));
     }
 
+    if (!text || !text.trim()) {
+      return reject(new Error('请输入要合成的文本'));
+    }
+
     try {
       const { token, date } = await this.generateToken(accessKeyId, accessKeySecret);
       const ep = endpoint || 'nls-gateway-cn-shanghai.aliyuncs.com';
-      // 注意：阿里云 NLS WebSocket 需要 wss，端口 443
-      const wsUrl = `wss://${ep}:443/stream/v1/tts`;
+      // FIX: 将 token 作为查询参数拼到 WebSocket URL
+      const wsUrl = `wss://${ep}:443/stream/v1/tts?token=${encodeURIComponent(token)}`;
 
       const ws = new WebSocket(wsUrl);
       const audioChunks = [];
       let synthesisComplete = false;
       let timeoutId = null;
+      let chunkIndex = 0;
 
       // 超时处理
       timeoutId = setTimeout(() => {
@@ -116,7 +136,8 @@ const AliyunBackend = {
       ws.binaryType = 'arraybuffer';
 
       ws.onopen = () => {
-        // 发送 StartSynthesis 消息
+        // 阿里云 NLS WebSocket 协议: StartSynthesis 消息
+        // header 中同时传递 nls_token（备选鉴权方式）
         const startMsg = {
           header: {
             message_id: this._generateId(),
@@ -124,9 +145,10 @@ const AliyunBackend = {
             namespace: 'SpeechSynthesizer',
             name: 'StartSynthesis',
             appkey: appKey,
+            nls_token: token,
           },
           payload: {
-            voice: voice || 'xiaoyun',
+            voice: voice ? voice.split('（')[0] : 'xiaoyun',
             format: format === 'wav' ? 'wav' : 'mp3',
             sample_rate: 16000,
             volume: volume,
@@ -146,12 +168,6 @@ const AliyunBackend = {
         };
 
         ws.send(JSON.stringify(startMsg));
-
-        // 阿里云还需要发送额外的 header 参数（通过 URL token 或 header）
-        // 实际上阿里云 NLS WebSocket 鉴权通过 token，已经在 URL 上没有携带
-        // 这里使用标准 NLS 协议，token 需要通过 URL 传递
-        // 但由于 WebSocket API 的限制，我们用另一种方式：
-        // 使用 NLS 的 token 鉴权：在建立连接后发送
       };
 
       ws.onmessage = (event) => {
@@ -166,7 +182,7 @@ const AliyunBackend = {
               clearTimeout(timeoutId);
               ws.close();
 
-              // 合并音频数据
+              // 合并全部音频帧
               const totalLength = audioChunks.reduce((s, c) => s + c.byteLength, 0);
               const merged = new Uint8Array(totalLength);
               let offset = 0;
@@ -176,10 +192,11 @@ const AliyunBackend = {
               }
               resolve(merged.buffer);
             } else if (header.name === 'TaskFailed') {
-              const errMsg = msg.payload?.status_text || '未知错误';
+              const statusCode = msg.payload?.status || '';
+              const errMsg = msg.payload?.status_text || msg.payload?.error_message || '未知错误';
               clearTimeout(timeoutId);
               ws.close();
-              reject(new Error(`阿里云 TTS 失败: ${errMsg}`));
+              reject(new Error(`阿里云 TTS 失败${statusCode ? ` (${statusCode})` : ''}: ${errMsg}`));
             }
           } catch (e) {
             console.warn('解析阿里云消息失败:', e);
@@ -188,6 +205,16 @@ const AliyunBackend = {
           // 二进制音频帧
           if (event.data.byteLength > 0) {
             audioChunks.push(event.data);
+            chunkIndex++;
+
+            // 流式模式：逐帧推送回调
+            if (streaming && typeof onChunk === 'function') {
+              onChunk({
+                chunk: new Blob([event.data], { type: format === 'wav' ? 'audio/wav' : 'audio/mpeg' }),
+                index: chunkIndex,
+                totalBytes: audioChunks.reduce((s, c) => s + c.byteLength, 0),
+              });
+            }
           }
         }
       };

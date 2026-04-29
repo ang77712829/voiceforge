@@ -21,6 +21,7 @@ const Storage = {
     pitch: 0,
     volume: 80,
     format: 'mp3',
+    streaming: true,
     activeBackend: 'funspeech',
     activeVoice: '中文男',
   },

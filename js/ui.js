@@ -21,7 +21,8 @@ const UI = {
       'fsBaseUrl', 'aliAccessKeyId', 'aliAccessKeySecret', 'aliAppKey', 'aliEndpoint',
       'setFsUrl', 'setAliEndpoint', 'setAliKeyId', 'setAliKeySecret', 'setAliAppKey',
       'settingsModal', 'configFunspeech', 'configAliyun', 'voicePanel',
-      'pitchGroup', 'volumeGroup',
+      'pitchGroup', 'volumeGroup', 'formatGroup',
+      'streamingToggle', 'progressBar', 'progressFill', 'progressText',
       // status dots
       'status-funspeech', 'status-aliyun', 'status-edge', 'status-browser',
     ];
@@ -76,6 +77,13 @@ const UI = {
     // 下载按钮
     el.btnDownload.addEventListener('click', () => App.download());
 
+    // 流式开关
+    if (el.streamingToggle) {
+      el.streamingToggle.addEventListener('change', () => {
+        Storage.saveSettings({ streaming: el.streamingToggle.checked });
+      });
+    }
+
     // 清空历史
     el.btnClearHistory.addEventListener('click', () => {
       if (confirm('确定要清空所有历史记录吗？')) {
@@ -108,6 +116,10 @@ const UI = {
     const theme = settings.theme || 'dark';
     document.documentElement.setAttribute('data-theme', theme);
     this.elements.btnTheme.textContent = theme === 'dark' ? '🌙' : '☀️';
+    // 恢复流式开关状态
+    if (this.elements.streamingToggle) {
+      this.elements.streamingToggle.checked = settings.streaming !== false;
+    }
   },
 
   /* --- 设置弹窗 --- */
@@ -156,7 +168,16 @@ const UI = {
   /* --- 字符计数 --- */
   _updateCharCount() {
     const len = this.elements.textInput.value.length;
-    this.elements.charCount.textContent = `${len} / 5000`;
+    const el = this.elements.charCount;
+    el.textContent = `${len} / 5000`;
+
+    // 颜色警告
+    el.classList.remove('char-warn', 'char-danger');
+    if (len >= 4900) {
+      el.classList.add('char-danger');
+    } else if (len >= 4500) {
+      el.classList.add('char-warn');
+    }
   },
 
   /* --- 状态显示 --- */
@@ -210,11 +231,61 @@ const UI = {
     this.elements.configFunspeech.classList.toggle('hidden', backend !== 'funspeech');
     this.elements.configAliyun.classList.toggle('hidden', backend !== 'aliyun');
 
-    // 显示/隐藏参数（浏览器/Edge 不需要音调等）
+    // 参数可见性
     const needsPitch = ['edge', 'browser', 'aliyun'].includes(backend);
     const needsVolume = ['aliyun', 'edge', 'browser'].includes(backend);
+    const needsFormat = backend !== 'edge' && backend !== 'browser';
     this.elements.pitchGroup.classList.toggle('hidden', !needsPitch);
     this.elements.volumeGroup.classList.toggle('hidden', !needsVolume);
+
+    // 输出格式：Edge/Browser 固定 mp3，禁用选择
+    if (this.elements.formatGroup) {
+      this.elements.formatGroup.classList.toggle('hidden', !needsFormat);
+    }
+    if (needsFormat) {
+      this.elements.formatSelect.disabled = false;
+      this.elements.formatSelect.title = '';
+    } else {
+      this.elements.formatSelect.value = 'mp3';
+      this.elements.formatSelect.disabled = true;
+      this.elements.formatSelect.title = '此引擎仅支持 MP3 输出';
+    }
+
+    // 流式播放开关：仅 FunSpeech 和阿里云支持
+    if (this.elements.streamingToggle) {
+      const supportsStreaming = ['funspeech', 'aliyun'].includes(backend);
+      this.elements.streamingToggle.parentElement.classList.toggle('hidden', !supportsStreaming);
+      if (!supportsStreaming) {
+        this.elements.streamingToggle.checked = false;
+      }
+    }
+  },
+
+  /* --- 流式播放 --- */
+  getStreamingEnabled() {
+    return this.elements.streamingToggle && this.elements.streamingToggle.checked;
+  },
+
+  showProgress() {
+    const bar = this.elements.progressBar;
+    if (bar) bar.classList.remove('hidden');
+    if (this.elements.progressFill) this.elements.progressFill.style.width = '0%';
+    if (this.elements.progressText) this.elements.progressText.textContent = '已接收 0 帧';
+  },
+
+  updateProgress(frameCount, totalBytes) {
+    if (this.elements.progressText) {
+      this.elements.progressText.textContent = `已接收 ${frameCount} 帧 · ${(totalBytes / 1024).toFixed(1)} KB`;
+    }
+    // 动画填充（因为没有总帧数，用 pulse 动画代替进度条）
+    if (this.elements.progressFill) {
+      this.elements.progressFill.style.width = `${Math.min(frameCount * 5, 95)}%`;
+    }
+  },
+
+  hideProgress() {
+    const bar = this.elements.progressBar;
+    if (bar) bar.classList.add('hidden');
   },
 
   /* --- 历史记录 --- */
@@ -260,11 +331,11 @@ const UI = {
         const id = btn.dataset.id;
         const item = history.find(h => h.id === id);
         if (item && item.audioData) {
-          const blob = AudioManager.dataUrlToBlob(item.audioData);
-          const audioManagerTmp = Object.create(AudioManager);
-          audioManagerTmp.currentBlob = blob;
-          audioManagerTmp.currentFormat = item.format;
-          audioManagerTmp.download(`voiceforge-${item.timestamp}.${item.format}`);
+          AudioManager.downloadFromDataUrl(
+            item.audioData,
+            `voiceforge-${item.timestamp}.${item.format}`,
+            item.format
+          );
         }
       });
     });

@@ -75,7 +75,7 @@ const App = {
     const fsHealthy = await FunSpeechBackend.checkHealth(fsConfig.baseUrl);
     UI.setHealthStatus('funspeech', fsHealthy ? 'online' : 'offline');
 
-    // 阿里云（只检查配置）
+    // 阿里云
     const aliConfig = UI.getBackendConfig('aliyun');
     const aliHealthy = await AliyunBackend.checkHealth(aliConfig);
     UI.setHealthStatus('aliyun', aliHealthy ? 'online' : 'offline');
@@ -100,23 +100,54 @@ const App = {
     const speed = parseFloat(UI.elements.speed.value);
     const pitch = parseInt(UI.elements.pitch.value);
     const volume = parseInt(UI.elements.volume.value);
-    const format = UI.elements.formatSelect.value;
+    let format = UI.elements.formatSelect.value;
     const voice = UI.elements.voiceSelect.value;
+    const streaming = UI.getStreamingEnabled();
+    const config = UI.getBackendConfig(this.currentBackend);
 
     UI.setLoading(true);
-    UI.setStatus('🎵 正在合成...', '');
+
+    if (streaming) {
+      UI.showProgress();
+      UI.setStatus('🎵 流式合成中...', '');
+    } else {
+      UI.setStatus('🎵 正在合成...', '');
+    }
 
     try {
       let audioData = null;
-      const config = UI.getBackendConfig(this.currentBackend);
 
       switch (this.currentBackend) {
         case 'funspeech':
-          audioData = await FunSpeechBackend.synthesize(config.baseUrl, { text, voice, speed, format });
+          if (streaming) {
+            // WebSocket 流式合成
+            audioData = await FunSpeechBackend.synthesizeStreaming(
+              config.baseUrl,
+              { text, voice, speed, format },
+              (info) => {
+                UI.updateProgress(info.index, info.totalBytes);
+              }
+            );
+          } else {
+            audioData = await FunSpeechBackend.synthesize(config.baseUrl, { text, voice, speed, format });
+          }
           break;
 
         case 'aliyun':
-          audioData = await AliyunBackend.synthesize(config, { text, voice, speed, pitch, volume, format });
+          if (streaming) {
+            audioData = await AliyunBackend.synthesize(
+              config,
+              { text, voice, speed, pitch, volume, format },
+              {
+                streaming: true,
+                onChunk: (info) => {
+                  UI.updateProgress(info.index, info.totalBytes);
+                },
+              }
+            );
+          } else {
+            audioData = await AliyunBackend.synthesize(config, { text, voice, speed, pitch, volume, format });
+          }
           break;
 
         case 'edge':
@@ -127,6 +158,7 @@ const App = {
         case 'browser':
           await BrowserBackend.synthesize(config, { text, voice, speed, pitch, volume });
           UI.setStatus('✅ 浏览器已开始朗读（不支持导出音频）', 'success');
+          UI.hideProgress();
           UI.setLoading(false);
           return;
       }
@@ -154,6 +186,7 @@ const App = {
       console.error('合成失败:', e);
       UI.setStatus(`❌ ${e.message}`, 'error');
     } finally {
+      UI.hideProgress();
       UI.setLoading(false);
     }
   },
@@ -161,7 +194,11 @@ const App = {
   /** 下载音频 */
   download() {
     const settings = Storage.getSettings();
-    AudioManager.download(`voiceforge-${Date.now()}.${settings.format}`);
+    // 导出名称：文本前10字 + 时间戳
+    const text = UI.elements.textInput.value.trim();
+    let prefix = text ? text.replace(/\s/g, '').slice(0, 10) : '';
+    if (!prefix) prefix = 'voiceforge';
+    AudioManager.download(`${prefix}-${Date.now()}.${settings.format}`);
   },
 };
 

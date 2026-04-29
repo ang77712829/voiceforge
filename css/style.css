@@ -306,6 +306,29 @@ body {
   outline: none;
 }
 
+/* --- Progress Bar --- */
+.progress-bar {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.progress-fill {
+  height: 4px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-dim));
+  border-radius: 2px;
+  transition: width 0.3s ease;
+  min-width: 2px;
+}
+.progress-text {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
 /* --- History --- */
 .history-panel {
   background: var(--bg-secondary);
@@ -427,6 +450,50 @@ body {
   margin-bottom: 4px;
 }
 
+/* --- Toggle Switch --- */
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  user-select: none;
+}
+.toggle-label input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 36px;
+  height: 20px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  position: relative;
+  transition: background var(--transition), border-color var(--transition);
+}
+.toggle-label input[type="checkbox"]::before {
+  content: '';
+  position: absolute;
+  width: 14px; height: 14px;
+  left: 2px; top: 2px;
+  background: var(--text-secondary);
+  border-radius: 50%;
+  transition: left var(--transition), background var(--transition);
+}
+.toggle-label input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.toggle-label input[type="checkbox"]:checked::before {
+  left: 18px;
+  background: #fff;
+}
+
+/* --- Char Count Colors --- */
+.char-warn { color: var(--warning) !important; }
+.char-danger { color: var(--danger) !important; }
+
 /* --- Utilities --- */
 .hidden { display: none !important; }
 
@@ -440,6 +507,52 @@ body {
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
+}
+
+/* --- Streaming checkbox --- */
+.checkbox-label {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  flex-direction: row !important;
+  justify-content: flex-start !important;
+}
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+/* --- Progress bar --- */
+.progress-active {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+.progress-track {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+  min-width: 2%;
+}
+.progress-active span {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 /* --- Loading state on button --- */

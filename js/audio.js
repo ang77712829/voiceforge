@@ -37,10 +37,20 @@ const AudioManager = {
     document.getElementById('playerArea').classList.remove('hidden');
   },
 
-  /** 下载当前音频 */
-  download(filename) {
+  /**
+   * 下载当前音频
+   * @param {string} filename  可选文件名
+   * @param {string} textHint  可选文本提示（取前 10 字用于文件命名）
+   */
+  download(filename, textHint) {
     if (!this.currentBlob && !this.player.src) return;
-    const name = filename || `voiceforge-${Date.now()}.${this.currentFormat}`;
+    // 文件命名：文本前 10 字 + 时间戳
+    let name = filename;
+    if (!name) {
+      const prefix = textHint ? textHint.replace(/\s/g, '').slice(0, 10) : 'voiceforge';
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      name = `${prefix}_${ts}.${this.currentFormat}`;
+    }
 
     if (this.currentBlob) {
       const url = URL.createObjectURL(this.currentBlob);
@@ -49,6 +59,15 @@ const AudioManager = {
     } else if (this.player.src.startsWith('data:')) {
       this._triggerDownload(this.player.src, name);
     }
+  },
+
+  /** 从 dataUrl 直接下载（用于历史记录） */
+  downloadFromDataUrl(dataUrl, filename, format = 'mp3') {
+    const name = filename || `voiceforge-${Date.now()}.${format}`;
+    const blob = this.dataUrlToBlob(dataUrl);
+    const url = URL.createObjectURL(blob);
+    this._triggerDownload(url, name);
+    URL.revokeObjectURL(url);
   },
 
   _triggerDownload(url, filename) {

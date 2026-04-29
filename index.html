@@ -85,12 +85,24 @@
           <label>音量 <span id="volumeVal">80</span></label>
           <input type="range" id="volume" min="0" max="100" step="5" value="80">
         </div>
-        <div class="param-group">
+        <div class="param-group" id="formatGroup">
           <label>输出格式</label>
           <select id="formatSelect" class="select-full">
             <option value="mp3">MP3</option>
             <option value="wav">WAV</option>
           </select>
+        </div>
+        <div class="param-group" id="streamingGroup">
+          <label class="toggle-label">
+            <input type="checkbox" id="streamingToggle" checked>
+            <span>🎬 流式播放（边合成边听）</span>
+          </label>
+        </div>
+        <div class="param-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="chkStreaming">
+            流式播放（边合成边播放）
+          </label>
         </div>
       </section>
 
@@ -132,6 +144,12 @@
       <!-- 音频播放器 -->
       <div class="player-area" id="playerArea">
         <audio id="audioPlayer" controls></audio>
+      </div>
+
+      <!-- 流式进度条 -->
+      <div class="progress-bar hidden" id="progressBar">
+        <div class="progress-fill" id="progressFill"></div>
+        <div class="progress-text" id="progressText">已接收 0 帧</div>
       </div>
     </section>
 
