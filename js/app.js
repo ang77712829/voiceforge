@@ -82,11 +82,11 @@ const App = {
 
     // Edge
     const edgeHealthy = await EdgeBackend.checkHealth();
-    UI.setHealthStatus('edge', edgeHealthy ? 'online' : 'online');
+    UI.setHealthStatus('edge', edgeHealthy ? 'online' : 'offline');
 
     // 浏览器
     const browserHealthy = await BrowserBackend.checkHealth();
-    UI.setHealthStatus('browser', browserHealthy ? 'online' : 'online');
+    UI.setHealthStatus('browser', browserHealthy ? 'online' : 'offline');
   },
 
   /** 合成语音 */
@@ -94,6 +94,10 @@ const App = {
     const text = UI.elements.textInput.value.trim();
     if (!text) {
       UI.setStatus('⚠️ 请输入文本', 'error');
+      return;
+    }
+    if (text.length > 5000) {
+      UI.setStatus('❌ 文本过长，最多 5000 字符', 'error');
       return;
     }
 

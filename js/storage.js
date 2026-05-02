@@ -74,12 +74,18 @@ const Storage = {
       voice: item.voice,
       backend: item.backend,
       timestamp: Date.now(),
-      audioData: item.audioData, // base64 data URL
+      hasAudio: !!item.audioData, // 不存完整 dataUrl，避免 localStorage 爆炸
       format: item.format || 'mp3',
     });
-    // 最多保留 50 条
-    const trimmed = history.slice(0, 50);
-    localStorage.setItem(this.KEYS.HISTORY, JSON.stringify(trimmed));
+    // 最多保留 20 条
+    const trimmed = history.slice(0, 20);
+    let serialized = JSON.stringify(trimmed);
+    // 4MB localStorage 溢出保护：超限则逐条删除最旧的
+    while (serialized.length > 4 * 1024 * 1024 && trimmed.length > 1) {
+      trimmed.pop();
+      serialized = JSON.stringify(trimmed);
+    }
+    localStorage.setItem(this.KEYS.HISTORY, serialized);
     return trimmed;
   },
 

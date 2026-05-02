@@ -55,8 +55,7 @@ const AliyunBackend = {
       await fetch(`https://${ep}/`, { signal: AbortSignal.timeout(3000) });
       return true;
     } catch {
-      // fetch 可能因 CORS/404 失败，但说明网络可达
-      return true;
+      return false;
     }
   },
 
