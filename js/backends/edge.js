@@ -75,10 +75,8 @@ const EdgeBackend = {
           // 降级到 SpeechSynthesis
           this._speechSynthesize(text, voice, speed, pitch, volume)
             .then(() => {
-              // SpeechSynthesis 不返回音频数据
-              reject(new Error(
-                'Edge TTS API 不可用，已通过浏览器朗读。\n\n如需导出音频文件，请使用 FunSpeech 或阿里云后端。'
-              ));
+              // SpeechSynthesis 朗读成功但不返回音频数据
+              resolve(null);
             })
             .catch(reject);
         });
@@ -151,8 +149,29 @@ const EdgeBackend = {
       utterance.pitch = pitch !== undefined ? (pitch / 20) + 1 : 1;
       utterance.volume = (volume || 80) / 100;
 
-      utterance.onend = () => resolve(null);
-      utterance.onerror = (e) => reject(new Error(`浏览器 TTS 错误: ${e.error}`));
+      let settled = false;
+      const timeout = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          speechSynthesis.cancel();
+          reject(new Error('Speech synthesis timeout'));
+        }
+      }, 30000);
+
+      utterance.onend = () => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timeout);
+          resolve(null);
+        }
+      };
+      utterance.onerror = (e) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timeout);
+          reject(new Error(`浏览器 TTS 错误: ${e.error}`));
+        }
+      };
 
       speechSynthesis.speak(utterance);
     });

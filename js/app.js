@@ -69,24 +69,28 @@ const App = {
 
   /** 检查所有后端健康状态 */
   async checkBackendHealth() {
-    // FunSpeech
+    // 设置所有状态为 checking
     UI.setHealthStatus('funspeech', 'checking');
+    UI.setHealthStatus('aliyun', 'checking');
+    UI.setHealthStatus('edge', 'checking');
+    UI.setHealthStatus('browser', 'checking');
+
+    // 并行检查所有后端
     const fsConfig = UI.getBackendConfig('funspeech');
-    const fsHealthy = await FunSpeechBackend.checkHealth(fsConfig.baseUrl);
-    UI.setHealthStatus('funspeech', fsHealthy ? 'online' : 'offline');
-
-    // 阿里云
     const aliConfig = UI.getBackendConfig('aliyun');
-    const aliHealthy = await AliyunBackend.checkHealth(aliConfig);
-    UI.setHealthStatus('aliyun', aliHealthy ? 'online' : 'offline');
 
-    // Edge
-    const edgeHealthy = await EdgeBackend.checkHealth();
-    UI.setHealthStatus('edge', edgeHealthy ? 'online' : 'offline');
+    const results = await Promise.allSettled([
+      FunSpeechBackend.checkHealth(fsConfig.baseUrl),
+      AliyunBackend.checkHealth(aliConfig),
+      EdgeBackend.checkHealth(),
+      BrowserBackend.checkHealth(),
+    ]);
 
-    // 浏览器
-    const browserHealthy = await BrowserBackend.checkHealth();
-    UI.setHealthStatus('browser', browserHealthy ? 'online' : 'offline');
+    const backends = ['funspeech', 'aliyun', 'edge', 'browser'];
+    backends.forEach((name, i) => {
+      const status = results[i].status === 'fulfilled' && results[i].value ? 'online' : 'offline';
+      UI.setHealthStatus(name, status);
+    });
   },
 
   /** 合成语音 */
@@ -157,6 +161,13 @@ const App = {
         case 'edge':
           audioData = await EdgeBackend.synthesize(config, { text, voice, speed, pitch, volume });
           format = 'mp3'; // Edge 返回 mp3
+          if (audioData === null) {
+            // Edge TTS 降级到浏览器朗读，不返回音频数据
+            UI.setStatus('✅ 已通过浏览器朗读（不支持导出音频）', 'success');
+            UI.hideProgress();
+            UI.setLoading(false);
+            return;
+          }
           break;
 
         case 'browser':

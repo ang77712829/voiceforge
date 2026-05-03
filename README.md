@@ -155,3 +155,12 @@ voiceforge/
 ## 📄 License
 
 MIT
+
+## 🌐 浏览器兼容性
+
+- Chrome 103+
+- Firefox 100+
+- Safari 16+
+- Edge 103+
+
+> IndexedDB 用于存储历史记录音频数据，需现代浏览器支持。
