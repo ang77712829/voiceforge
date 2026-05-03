@@ -10,7 +10,7 @@
 - **音色丰富** — FunSpeech 7 种音色 + 阿里云 28 种 + Edge/浏览器系统音色
 - **参数可调** — 语速、音调、音量自由控制
 - **播放与下载** — 合成后在页面内播放，一键下载 MP3/WAV
-- **历史记录** — 最近 50 条合成记录，localStorage 持久化存储
+- **历史记录** — 最近 20 条合成记录，localStorage 持久化存储
 - **明暗主题** — 护眼模式自动切换
 - **响应式布局** — 桌面端三栏 / 移动端单栏自适应
 - **键盘快捷键** — `Ctrl+Enter` 快速合成
@@ -114,6 +114,27 @@ voiceforge/
 - [x] FunSpeech WebSocket 流式播放
 - [ ] PWA 离线支持
 - [ ] 导出历史为 ZIP
+
+## 🔧 更新日志
+
+### v1.2.0 (2026-05-03)
+
+#### Bug 修复
+- 🔴 **历史记录播放/下载修复**：使用 IndexedDB 存储音频数据（原 localStorage 只存了布尔值），历史记录的播放和下载按钮现在正常工作
+- 🔴 **删除重复流式播放开关**：页面同时存在两个外观不同的流式播放开关，删除了冗余的 `chkStreaming` 复选框
+- 🔴 **统一默认音色值**：FunSpeech WebSocket 流式合成时默认音色从 `'zhinan'` 改为 `'中文男'`，与 Storage 配置一致
+
+#### 稳定性改进
+- ⚠️ **修复 Audio Object URL 内存泄漏**：每次播放前释放上一次创建的 Object URL
+- ⚠️ **FunSpeech WebSocket 错误处理**：启动后的 WebSocket 错误不再静默丢弃，正确调用 `cleanup()` 避免 Promise 永远 pending
+- ⚠️ **Edge TTS 降级不再误报错误**：`SpeechSynthesis` 降级朗读成功后改为 `resolve(null)` 而非 `reject()`
+- ⚠️ **Edge TTS 超时保护**：添加 30 秒超时，防止 `SpeechSynthesis` 的 `onend` 不触发导致 Promise 永远 pending
+
+#### 代码质量
+- 提取音频合并公共函数 `AudioManager.mergeChunks()`，消除 FunSpeech(3处) 和 Aliyun(2处) 中的重复代码
+- 删除 `funspeech.js` 中重复的死代码 `case 'SynthesisStarted'`
+- 健康检查从串行 `await` 改为 `Promise.allSettled()` 并行执行，启动速度提升 ~4x
+- FunSpeech URL 硬编码统一为 `Storage.DEFAULT_SETTINGS` 单一来源
 
 ## 🔧 更新日志
 
