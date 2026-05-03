@@ -182,14 +182,7 @@ const AliyunBackend = {
               ws.close();
 
               // 合并全部音频帧
-              const totalLength = audioChunks.reduce((s, c) => s + c.byteLength, 0);
-              const merged = new Uint8Array(totalLength);
-              let offset = 0;
-              for (const chunk of audioChunks) {
-                merged.set(new Uint8Array(chunk), offset);
-                offset += chunk.byteLength;
-              }
-              resolve(merged.buffer);
+              resolve(AudioManager.mergeChunks(audioChunks));
             } else if (header.name === 'TaskFailed') {
               const statusCode = msg.payload?.status || '';
               const errMsg = msg.payload?.status_text || msg.payload?.error_message || '未知错误';
@@ -228,14 +221,7 @@ const AliyunBackend = {
           clearTimeout(timeoutId);
           if (audioChunks.length > 0) {
             // 有部分数据，也算成功
-            const totalLength = audioChunks.reduce((s, c) => s + c.byteLength, 0);
-            const merged = new Uint8Array(totalLength);
-            let offset = 0;
-            for (const chunk of audioChunks) {
-              merged.set(new Uint8Array(chunk), offset);
-              offset += chunk.byteLength;
-            }
-            resolve(merged.buffer);
+            resolve(AudioManager.mergeChunks(audioChunks));
           } else {
             reject(new Error('阿里云 TTS 连接意外关闭，未收到音频数据'));
           }

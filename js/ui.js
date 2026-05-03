@@ -125,7 +125,7 @@ const UI = {
   /* --- 设置弹窗 --- */
   _openSettings() {
     const s = Storage.getSettings();
-    this.elements.setFsUrl.value = s.funspeechUrl || 'http://192.168.1.2:8000';
+    this.elements.setFsUrl.value = s.funspeechUrl || Storage.DEFAULT_SETTINGS.funspeechUrl;
     this.elements.setAliEndpoint.value = s.aliEndpoint || 'nls-gateway-cn-shanghai.aliyuncs.com';
     this.elements.setAliKeyId.value = s.aliAccessKeyId || '';
     this.elements.setAliKeySecret.value = s.aliAccessKeySecret || '';
@@ -315,27 +315,33 @@ const UI = {
 
     // 绑定事件
     container.querySelectorAll('.hi-play').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const id = btn.dataset.id;
         const item = history.find(h => h.id === id);
-        if (item && item.audioData) {
-          AudioManager.playDataUrl(item.audioData, item.format);
+        if (item) {
+          const audioData = await getAudio(item.id);
+          if (audioData) {
+            AudioManager.playDataUrl(audioData, item.format);
+          }
         }
       });
     });
 
     container.querySelectorAll('.hi-download').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const id = btn.dataset.id;
         const item = history.find(h => h.id === id);
-        if (item && item.audioData) {
-          AudioManager.downloadFromDataUrl(
-            item.audioData,
-            `voiceforge-${item.timestamp}.${item.format}`,
-            item.format
-          );
+        if (item) {
+          const audioData = await getAudio(item.id);
+          if (audioData) {
+            AudioManager.downloadFromDataUrl(
+              audioData,
+              `voiceforge-${item.timestamp}.${item.format}`,
+              item.format
+            );
+          }
         }
       });
     });

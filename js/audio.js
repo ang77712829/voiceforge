@@ -6,15 +6,34 @@ const AudioManager = {
   player: null,
   currentBlob: null,
   currentFormat: 'mp3',
+  currentUrl: null,
 
   init() {
     this.player = document.getElementById('audioPlayer');
   },
 
+  /** 合并多个 ArrayBuffer 音频帧为一个 */
+  mergeChunks(chunks) {
+    const totalLength = chunks.reduce((s, c) => s + c.byteLength, 0);
+    const merged = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      merged.set(new Uint8Array(chunk), offset);
+      offset += chunk.byteLength;
+    }
+    return merged.buffer;
+  },
+
   /** 播放音频 blob */
   play(blob, format = 'mp3') {
     const mimeType = format === 'wav' ? 'audio/wav' : 'audio/mpeg';
+    // 释放旧的 Object URL，避免内存泄漏
+    if (this.currentUrl) {
+      URL.revokeObjectURL(this.currentUrl);
+      this.currentUrl = null;
+    }
     const url = URL.createObjectURL(new Blob([blob], { type: mimeType }));
+    this.currentUrl = url;
     this.currentBlob = blob;
     this.currentFormat = format;
     this.player.src = url;

@@ -108,14 +108,7 @@ const FunSpeechBackend = {
           else if (audioChunks.length === 0) reject(new Error('FunSpeech 流式合成未收到音频'));
           else {
             // 即使没收到 SynthesisCompleted，有音频也算成功
-            const totalLength = audioChunks.reduce((s, c) => s + c.byteLength, 0);
-            const merged = new Uint8Array(totalLength);
-            let offset = 0;
-            for (const chunk of audioChunks) {
-              merged.set(new Uint8Array(chunk), offset);
-              offset += chunk.byteLength;
-            }
-            resolve(merged.buffer);
+            resolve(AudioManager.mergeChunks(audioChunks));
           }
         }
         if (ws.readyState === WebSocket.OPEN) ws.close();
@@ -136,7 +129,7 @@ const FunSpeechBackend = {
             name: 'StartSynthesis',
           },
           payload: {
-            voice: voice || 'zhinan',
+            voice: voice || '中文男',
             format: fmt,
             sample_rate: 16000,
             volume: 50,
@@ -178,14 +171,7 @@ const FunSpeechBackend = {
                 complete = true;
                 clearTimeout(timeoutId);
                 if (ws.readyState === WebSocket.OPEN) ws.close();
-                const totalLength = audioChunks.reduce((s, c) => s + c.byteLength, 0);
-                const merged = new Uint8Array(totalLength);
-                let offset = 0;
-                for (const chunk of audioChunks) {
-                  merged.set(new Uint8Array(chunk), offset);
-                  offset += chunk.byteLength;
-                }
-                resolve(merged.buffer);
+                resolve(AudioManager.mergeChunks(audioChunks));
                 break;
 
               case 'TaskFailed':
@@ -195,7 +181,6 @@ const FunSpeechBackend = {
               case 'MetaInfo':
               case 'SentenceBegin':
               case 'SentenceSynthesis':
-              case 'SynthesisStarted':
                 // 正常状态消息，无需处理
                 break;
 
@@ -221,13 +206,9 @@ const FunSpeechBackend = {
         }
       };
 
-      ws.onerror = () => {
-        if (!synthesisStarted) {
-          // 还没开始就出错了，降级 HTTP
-          console.warn('FunSpeech WebSocket 连接失败，降级到 HTTP 合成');
-          clearTimeout(timeoutId);
-          this.synthesize(baseUrl, params).then(resolve).catch(reject);
-        }
+      ws.onerror = (err) => {
+        console.error('WebSocket error:', err);
+        cleanup(new Error(`WebSocket error: ${err.message || 'unknown'}`));
       };
 
       ws.onclose = () => {
@@ -236,14 +217,7 @@ const FunSpeechBackend = {
           if (audioChunks.length > 0) {
             complete = true;
             clearTimeout(timeoutId);
-            const totalLength = audioChunks.reduce((s, c) => s + c.byteLength, 0);
-            const merged = new Uint8Array(totalLength);
-            let offset = 0;
-            for (const chunk of audioChunks) {
-              merged.set(new Uint8Array(chunk), offset);
-              offset += chunk.byteLength;
-            }
-            resolve(merged.buffer);
+            resolve(AudioManager.mergeChunks(audioChunks));
           } else {
             cleanup(new Error('FunSpeech WebSocket 连接已关闭，未收到音频'));
           }
